@@ -311,7 +311,12 @@ package.preload["component"] = function()
     end
     return nil, "no such component"
   end
-  function c.proxy(a) return comps[a] end
+  function c.proxy(a)
+    if SCEN == "iface-invoke" and a == "me-0000-iface" then
+      return { address = a, type = comps[a].type } -- метод доступен только через component.invoke
+    end
+    return comps[a]
+  end
   function c.invoke(a, m, ...) return comps[a][m](...) end
   function c.isAvailable(t) for _, p in pairs(comps) do if p.type == t then return true end end return false end
   c.gpu = comps["gpu-0000"]
@@ -371,6 +376,12 @@ if SCEN == "uv284" or SCEN == "uhv284" then
   f:close()
   local tier = (SCEN == "uv284") and "UV" or "UHV"
   assert(events:find("SC base: " .. tier, 1, true), "2.8.4 " .. tier .. " base was not recognized")
+end
+if SCEN == "iface-invoke" then
+  local f = assert(io.open(LOG, "r"))
+  local events = f:read("*a")
+  f:close()
+  assert(events:find("ME-сеть: me-0000-", 1, true), "ME fluids available via invoke were not detected")
 end
 local evaluated = mach.res.ok + mach.res.fail
 local hist = {}
