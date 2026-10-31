@@ -14,7 +14,7 @@ local sides     = require("sides")
 local fs        = require("filesystem")
 local uni       = require("unicode")
 
-local VERSION  = "1.2.0"
+local VERSION  = "1.2.1"
 local CFG_PATH = "/home/degasser.cfg.lua"
 
 local AMOUNT = {
@@ -175,7 +175,7 @@ local function networkFluids()
   if not me then return nil end
   local now = computer.uptime()
   if meCache.map and now - meCache.at < 3 then return meCache.map end
-  local ok, list = pcall(me.getFluidsInNetwork)
+  local ok, list = pcall(component.invoke, me.address, "getFluidsInNetwork")
   if not ok or type(list) ~= "table" then return nil end
   local map = {}
   for i = 1, (list.n or #list) do
@@ -880,12 +880,7 @@ local function resolveME()
     end
     addr = found[1]
   end
-  local p = component.proxy(addr)
-  if type(p.getFluidsInNetwork) ~= "function" then
-    log("WARN", "%s (%s) не умеет getFluidsInNetwork — работаю без данных сети", addr:sub(1, 8), p.type)
-    return nil
-  end
-  return p
+  return component.proxy(addr)
 end
 
 local function init()
@@ -893,11 +888,15 @@ local function init()
   rs = resolve(cfg.redstone, "redstone")
   if cfg.refillSources or cfg.me then
     me = resolveME()
-    if me then
-      local net = networkFluids()
+    local net = me and networkFluids()
+    if net then
       log("INFO", "ME-сеть: %s (%s), жидкостей в сети: %s", me.address:sub(1, 8), me.type,
-        net and tostring((function() local n = 0 for _ in pairs(net) do n = n + 1 end return n end)()) or "?")
+        tostring((function() local n = 0 for _ in pairs(net) do n = n + 1 end return n end)()))
     else
+      if me then
+        log("WARN", "%s (%s) не отдаёт данные getFluidsInNetwork — работаю без данных сети", me.address:sub(1, 8), me.type)
+        me = nil
+      end
       log("WARN", "запас ME-сети не виден: предпроверка по заполненности интерфейсов (возможна частичная подача, если сеть пуста)")
     end
   end
