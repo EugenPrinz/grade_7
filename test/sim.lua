@@ -31,6 +31,25 @@ local buffers = {
 }
 if SCEN == "lowstock" then buffers.B[SIDES.east].amount = 9300 end -- хватит на 2 подачи нейтрония
 
+-- Режим ME Dual Interface: источники ёмкостью 8000 L, AE доливает их из сети каждые 5 тиков.
+local IFACE = SCEN:sub(1, 5) == "iface"
+local net = {}
+if IFACE then
+  for _, side in pairs(buffers) do
+    for _, t in pairs(side) do t.capacity = 8000; t.amount = 8000; net[t.name] = 10^8 end
+  end
+  if SCEN:find("dry") then net[FL.neutronium] = 6000 end -- сеть кончится через пару подач
+end
+local function aeRefill()
+  for _, side in pairs(buffers) do
+    for _, t in pairs(side) do
+      local want = t.capacity - t.amount
+      local give = math.min(want, net[t.name] or 0, 4000)
+      if give > 0 then t.amount = t.amount + give; net[t.name] = net[t.name] - give end
+    end
+  end
+end
+
 local mach = { running=false, prog=0, maxp=0, idle=5, sig=0, inserted={}, res={ok=0, fail=0}, cycles=0,
                failsWithSig={} }
 
@@ -64,6 +83,7 @@ for _, n in pairs(FL) do valid[n] = true end
 
 local function worldTick()
   T = T + 1
+  if IFACE and T % 5 == 0 then aeRefill() end
   if mach.running then
     mach.prog = mach.prog + 1
     if T % 20 == 0 then
@@ -200,6 +220,17 @@ comps["rs-0000-io"] = {
   end,
 }
 
+if IFACE and not SCEN:find("nome") then
+  comps["me-0000-iface"] = {
+    address = "me-0000-iface", type = "me_interface",
+    getFluidsInNetwork = function()
+      local l = {}
+      for name, amt in pairs(net) do if amt > 0 then l[#l + 1] = { name = name, amount = amt, label = name } end end
+      l.n = #l
+      return l
+    end,
+  }
+end
 local SW, SH = 160, 50
 local scr, sbg = {}, {}
 local function clearScr() for y = 1, SH do scr[y] = {}; sbg[y] = {} for x = 1, SW do scr[y][x] = " "; sbg[y][x] = 0 end end end
@@ -314,6 +345,7 @@ loadfile = function(p)
           neutronium     = { transposer = "tB", from = sides.east,  to = sides.up },
         },
         logFile = LOG, logMaxBytes = 10^9, outputPerParallel = 900, ui = (SCEN ~= "noui"),
+        refillSources = IFACE,
       }
     end
   end

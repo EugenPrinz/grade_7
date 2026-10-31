@@ -14,7 +14,7 @@ local sides     = require("sides")
 local fs        = require("filesystem")
 local uni       = require("unicode")
 
-local VERSION  = "1.1.0"
+local VERSION  = "1.2.0"
 local CFG_PATH = "/home/degasser.cfg.lua"
 
 local AMOUNT = {
@@ -154,6 +154,7 @@ local function sourceStock(r)
     end
     name = f.name
     amt = amt + int(f.amount)
+    if int(f.capacity) > 0 then r.cap = int(f.capacity) end
   end
   if name then
     local want = fluidName(r)
@@ -163,6 +164,43 @@ local function sourceStock(r)
     r.learned = r.learned or name
   end
   return amt
+end
+
+-- Запас ME-сети (Adapter у любого ME-блока). Кэш 3 с: getFluidsInNetwork() тяжёлый на больших сетях.
+local me
+local meCache = { at = -100, map = nil }
+local function networkFluids()
+  if not me then return nil end
+  local now = computer.uptime()
+  if meCache.map and now - meCache.at < 3 then return meCache.map end
+  local ok, list = pcall(me.getFluidsInNetwork)
+  if not ok or type(list) ~= "table" then return nil end
+  local map = {}
+  for i = 1, (list.n or #list) do
+    local f = list[i]
+    if type(f) == "table" and f.name then map[f.name] = (map[f.name] or 0) + int(f.amount) end
+  end
+  meCache.at, meCache.map = now, map
+  return map
+end
+
+-- Сколько можно подать за цикл.
+--   буфер-танк:          содержимое танка
+--   интерфейс + сеть:    содержимое интерфейса + запас сети
+--   интерфейс без сети:  если интерфейс заполнен (≥90%) — считаем, что AE дольёт (math.huge)
+-- Возвращает available, local, err, net (net = nil, если сеть не видна)
+local function available(r)
+  local amt, err = sourceStock(r)
+  if err then return 0, amt, err end
+  if not r.refill then return amt, amt end
+  local name = fluidName(r)
+  local net = networkFluids()
+  if net and name then
+    local n = net[name] or 0
+    return amt + n, amt, nil, n
+  end
+  if r.cap and amt >= r.cap * 0.9 then return math.huge, amt end
+  return amt, amt
 end
 
 -- Сколько катализатора маршрута r лежит в его хэтче.
@@ -180,8 +218,13 @@ end
 local function pump(r, need, deadline)
   local left = need
   state.pumped[r.key] = 0
+  local lastMove = computer.uptime()
   while left > 0 do
-    if computer.uptime() > deadline then return need - left, "не успел до дедлайна" end
+    local now = computer.uptime()
+    if now > deadline then return need - left, "не успел до дедлайна" end
+    if now - lastMove > cfg.stallTimeout then
+      return need - left, string.format("нет поступления %d с (источник не доливается или хэтч не сливается)", cfg.stallTimeout)
+    end
     local ok, moved = r.t.transferFluid(r.from, r.to, left)
     if ok and type(moved) ~= "number" then
       return need - left, "transferFluid не вернул количество (старая версия OC?) — точная подача невозможна"
@@ -190,9 +233,10 @@ local function pump(r, need, deadline)
     if moved > left then return need - left + moved, "перелив (" .. moved .. " > " .. left .. ")" end
     if moved > 0 then
       left = left - moved
+      lastMove = computer.uptime()
       state.pumped[r.key] = need - left
     else
-      os.sleep(0.25) -- хэтч занят/полон: ждём слива машиной (каждые 20 тиков)
+      os.sleep(0.25) -- хэтч полон (ждём слива, каждые 20 тиков) или интерфейс пуст (ждём долива AE)
     end
   end
   return need
@@ -417,8 +461,8 @@ local function refreshData()
     for _, key in ipairs(KEYS) do
       local r = routes[key]
       if r then
-        local amt, err = sourceStock(r)
-        state.buffers[key] = { amt = amt, err = err }
+        local avail, loc, err, net = available(r)
+        state.buffers[key] = { avail = avail, loc = loc, net = net, err = err, refill = r.refill, cap = r.cap }
       end
     end
   end
@@ -521,7 +565,7 @@ local function render()
   local bsig = {}
   for _, key in ipairs(KEYS) do
     local b = st.buffers[key]
-    bsig[#bsig + 1] = b and (tostring(b.amt) .. tostring(b.err)) or "-"
+    bsig[#bsig + 1] = b and (tostring(b.avail) .. ":" .. tostring(b.loc) .. tostring(b.err)) or "-"
   end
   once("buf", table.concat(bsig, ","), function()
     for i, key in ipairs(KEYS) do
@@ -534,13 +578,21 @@ local function render()
       elseif b.err then
         rect(LX + 17, y, 50, 1, C.err)
         text(LX + 69, y, b.err, LW - 70, C.err)
+      elseif b.avail == math.huge then
+        -- интерфейс без данных сети: показываем заполненность интерфейса
+        local frac = b.cap and b.cap > 0 and b.loc / b.cap or 1
+        bar(LX + 17, y, 50, frac, C.ok)
+        text(LX + 69, y, fmtNum(b.loc) .. " L", 16, C.fg)
+        text(LX + 86, y, "AE доливает", 12, C.dim)
+        text(LX + 99, y, "сеть ?", LW - 100, C.dim)
       else
-        local uses = math.floor(b.amt / need)
+        local uses = math.floor(b.avail / need)
         local col = uses < 1 and C.err or (uses < cfg.lowStockCycles and C.warn or C.ok)
         bar(LX + 17, y, 50, uses / (cfg.lowStockCycles * 4), col)
-        text(LX + 69, y, fmtNum(b.amt) .. " L", 16, C.fg)
+        text(LX + 69, y, fmtNum(b.avail) .. " L", 16, C.fg)
         text(LX + 86, y, uses >= 1000 and "≥1000 сраб." or (uses .. " сраб."), 12, col)
-        text(LX + 99, y, uses < 1 and "ПУСТО" or (uses < cfg.lowStockCycles and "мало" or ""), LW - 100, col)
+        local tag = uses < 1 and "ПУСТО" or (uses < cfg.lowStockCycles and "мало" or (b.net and "сеть" or ""))
+        text(LX + 99, y, tag, LW - 100, uses < cfg.lowStockCycles and col or C.dim)
       end
     end
   end)
@@ -680,13 +732,13 @@ local function handleCycle()
   local missing = false
   for _, s in ipairs(plan) do
     local r = routes[s[1]]
-    local amt, err = sourceStock(r)
+    local avail, loc, err = available(r)
     if err then
       log("ERR", "%s: %s", s[1], err); missing = true
-    elseif amt < s[2] then
-      log("ERR", "%s: в буфере %d L, нужно %d L", s[1], amt, s[2]); missing = true
-    elseif amt < s[2] * (1 + cfg.lowStockCycles) then
-      log("WARN", "%s: запас на %d срабатываний", s[1], math.floor(amt / s[2]))
+    elseif avail < s[2] then
+      log("ERR", "%s: доступно %d L (в источнике %d), нужно %d L", s[1], avail, loc, s[2]); missing = true
+    elseif avail ~= math.huge and avail < s[2] * (1 + cfg.lowStockCycles) then
+      log("WARN", "%s: запас на %d срабатываний", s[1], math.floor(avail / s[2]))
     end
   end
   if missing then
@@ -764,6 +816,14 @@ local function scan()
     end
     print("  " .. a .. "  " .. table.concat(t, " "))
   end
+  print("ME (для cfg.me):")
+  for _, t in ipairs({ "me_interface", "me_controller", "me_dual_interface" }) do
+    for a in component.list(t, true) do
+      local ok, list = pcall(component.invoke, a, "getFluidsInNetwork")
+      local n = ok and type(list) == "table" and (list.n or #list) or nil
+      print(string.format("  %s  %s  жидкостей в сети: %s", a, t, n and tostring(n) or "нет getFluidsInNetwork"))
+    end
+  end
   print("transposer:")
   for a in component.list("transposer", true) do
     local p = component.proxy(a)
@@ -791,19 +851,60 @@ local function loadConfig()
     guardTicks = 60, drainTimeout = 4, lowStockCycles = 5,
     logFile = "/home/degasser.log", logMaxBytes = 64 * 1024,
     ui = true, uiInterval = 0.5,
+    refillSources = false, stallTimeout = 15,
   }
   for k, v in pairs(defaults) do if c[k] == nil then c[k] = v end end
   return c
 end
 
+local ME_TYPES = { "me_interface", "me_controller", "me_dual_interface" }
+
+-- ME-компонент для запаса сети: из конфига или единственный найденный.
+local function resolveME()
+  if cfg.me == false then return nil end
+  local addr
+  if cfg.me then
+    addr = component.get(cfg.me)
+    if not addr then log("WARN", "ME-компонент %s не найден — работаю без данных сети", tostring(cfg.me)); return nil end
+  else
+    local found = {}
+    for _, t in ipairs(ME_TYPES) do
+      for a in component.list(t, true) do found[#found + 1] = a end
+    end
+    if #found == 0 then return nil end
+    if #found > 1 then
+      log("WARN", "найдено %d ME-компонентов — укажи cfg.me, пока работаю без данных сети", #found)
+      return nil
+    end
+    addr = found[1]
+  end
+  local p = component.proxy(addr)
+  if type(p.getFluidsInNetwork) ~= "function" then
+    log("WARN", "%s (%s) не умеет getFluidsInNetwork — работаю без данных сети", addr:sub(1, 8), p.type)
+    return nil
+  end
+  return p
+end
+
 local function init()
   machine = resolve(cfg.machine, "gt_machine")
   rs = resolve(cfg.redstone, "redstone")
+  if cfg.refillSources or cfg.me then
+    me = resolveME()
+    if me then
+      local net = networkFluids()
+      log("INFO", "ME-сеть: %s (%s), жидкостей в сети: %s", me.address:sub(1, 8), me.type,
+        net and tostring((function() local n = 0 for _ in pairs(net) do n = n + 1 end return n end)()) or "?")
+    else
+      log("WARN", "запас ME-сети не виден: предпроверка по заполненности интерфейсов (возможна частичная подача, если сеть пуста)")
+    end
+  end
   local seen = {}
   for _, key in ipairs(KEYS) do
     local rc = cfg.routes and cfg.routes[key]
     if not rc then error("в конфиге нет маршрута '" .. key .. "'", 0) end
     local r = { key = key, t = resolve(rc.transposer, "transposer"), from = rc.from, to = rc.to, fluid = rc.fluid }
+    if rc.refill ~= nil then r.refill = rc.refill else r.refill = cfg.refillSources end
     local id = r.t.address .. ":" .. tostring(r.from)
     if seen[id] then error("маршруты '" .. seen[id] .. "' и '" .. key .. "' берут из одного буфера", 0) end
     seen[id] = key
