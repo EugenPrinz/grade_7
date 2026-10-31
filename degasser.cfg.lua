@@ -5,10 +5,10 @@ local sides = require("sides")
 return {
   -- Adapter на контроллере Residual Decontaminant Degasser (компонент gt_machine).
   -- nil = автопоиск, работает только если gt_machine в сети ровно один.
-  machine = nil,
+  machine = "c8eac84a-dedc-4087-8d28-73e1da9e42bc",
 
   -- Redstone I/O, стоящий вплотную к Degasser Control Hatch.
-  redstone = nil,
+  redstone = "ca0e9e93-871a-4222-a588-2e0b161778d2",
   -- Сторона Redstone I/O, смотрящая на Control Hatch. nil = максимум по всем сторонам
   -- (только если рядом нет других источников редстоуна).
   redstoneSide = nil,
@@ -19,7 +19,7 @@ return {
   -- ME-компонент для чтения запаса сети (Adapter вплотную к любому Dual Interface этой сети).
   -- nil = автопоиск (если ME-компонент в сети OC один), false = не использовать.
   -- Без него предпроверка мягче: «интерфейс заполнен => AE дольёт».
-  me = nil,
+  me = "de1db373-33dd-4104-b6bb-53dcc2840b80",
   -- Если за столько секунд ни один мБ не пришёл — подача прерывается и откатывается.
   stallTimeout = 15,
 
@@ -28,15 +28,16 @@ return {
   -- fluid = внутреннее имя жидкости в буфере (необязательно; scan покажет имена).
   --   Если задано — программа откажется лить, если в буфере что-то другое.
   -- SC base — ровно ОДИН тир (два разных SC в одном цикле = провал).
+  -- Перед запуском замени ic2coolant на molten.superconductoruvbase в верхнем интерфейсе первого transposer.
   -- Хэтчи под катализаторы лучше отдельные от G6-воды (или Quad Input Hatch).
   routes = {
-    coolant        = { transposer = "xxxxxxxx", from = sides.north, to = sides.up, fluid = nil },
-    helium         = { transposer = "xxxxxxxx", from = sides.south, to = sides.up, fluid = nil },
-    neon           = { transposer = "xxxxxxxx", from = sides.east,  to = sides.up, fluid = nil },
-    krypton        = { transposer = "xxxxxxxx", from = sides.west,  to = sides.up, fluid = nil },
-    xenon          = { transposer = "yyyyyyyy", from = sides.north, to = sides.up, fluid = nil },
-    superconductor = { transposer = "yyyyyyyy", from = sides.south, to = sides.up, fluid = nil },
-    neutronium     = { transposer = "yyyyyyyy", from = sides.east,  to = sides.up, fluid = nil },
+    coolant        = { transposer = "a8f23c4e-66cd-411b-b11d-4f67c4f61ce2", from = sides.front, to = sides.back, fluid = "supercoolant" },
+    helium         = { transposer = "667217cc-2ee1-4bf4-b8f1-c6fc147f2363", from = sides.left,  to = sides.back, fluid = "helium" },
+    neon           = { transposer = "667217cc-2ee1-4bf4-b8f1-c6fc147f2363", from = sides.front, to = sides.back, fluid = "neon" },
+    krypton        = { transposer = "667217cc-2ee1-4bf4-b8f1-c6fc147f2363", from = sides.right, to = sides.back, fluid = "krypton" },
+    xenon          = { transposer = "a8f23c4e-66cd-411b-b11d-4f67c4f61ce2", from = sides.right, to = sides.back, fluid = "xenon" },
+    superconductor = { transposer = "667217cc-2ee1-4bf4-b8f1-c6fc147f2363", from = sides.up,    to = sides.back, fluid = "molten.superconductoruvbase" },
+    neutronium     = { transposer = "a8f23c4e-66cd-411b-b11d-4f67c4f61ce2", from = sides.left,  to = sides.back, fluid = "molten.neutronium" },
   },
 
   pollInterval    = 0.25, -- с, опрос прогресса машины
