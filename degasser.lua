@@ -31,6 +31,8 @@ local LABEL = {
 local SC_TIERS = {
   { "umvbase", 2.0, "UMV" }, { "uivbase", 1.75, "UIV" }, { "uevbase", 1.5, "UEV" },
   { "uhvbase", 1.25, "UHV" }, { "uvbase", 1.0, "UV" },
+  { "longasssuperconductornameforuhvwire", 1.25, "UHV" },
+  { "longasssuperconductornameforuvwire", 1.0, "UV" },
 }
 local P_SC_BIT = 0.4 -- доля циклов, где требуется SC (биты 1 и не бит 3): 0.5 * 0.8
 
