@@ -28,7 +28,7 @@ return {
   -- fluid = внутреннее имя жидкости в буфере (необязательно; scan покажет имена).
   --   Если задано — программа откажется лить, если в буфере что-то другое.
   -- SC base — ровно ОДИН тир (два разных SC в одном цикле = провал).
-  -- Перед запуском замени ic2coolant на molten.superconductoruvbase в верхнем интерфейсе первого transposer.
+  -- UV-основа в GTNH 2.8.4: molten.longasssuperconductornameforuvwire.
   -- Хэтчи под катализаторы лучше отдельные от G6-воды (или Quad Input Hatch).
   routes = {
     coolant        = { transposer = "a8f23c4e-66cd-411b-b11d-4f67c4f61ce2", from = sides.front, to = sides.back, fluid = "supercoolant" },
@@ -36,7 +36,7 @@ return {
     neon           = { transposer = "667217cc-2ee1-4bf4-b8f1-c6fc147f2363", from = sides.front, to = sides.back, fluid = "neon" },
     krypton        = { transposer = "667217cc-2ee1-4bf4-b8f1-c6fc147f2363", from = sides.right, to = sides.back, fluid = "krypton" },
     xenon          = { transposer = "a8f23c4e-66cd-411b-b11d-4f67c4f61ce2", from = sides.right, to = sides.back, fluid = "xenon" },
-    superconductor = { transposer = "667217cc-2ee1-4bf4-b8f1-c6fc147f2363", from = sides.up,    to = sides.back, fluid = "molten.superconductoruvbase" },
+    superconductor = { transposer = "667217cc-2ee1-4bf4-b8f1-c6fc147f2363", from = sides.up,    to = sides.back, fluid = "molten.longasssuperconductornameforuvwire" },
     neutronium     = { transposer = "a8f23c4e-66cd-411b-b11d-4f67c4f61ce2", from = sides.left,  to = sides.back, fluid = "molten.neutronium" },
   },
 
