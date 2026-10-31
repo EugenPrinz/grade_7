@@ -54,17 +54,18 @@
 
 ## Установка
 
-1. Поставь OpenOS (`install` с дискеты).
-2. Скопируй файлы:
-   - `degasser.lua` → `/home/bin/degasser.lua`
-   - `degasser.cfg.lua` → `/home/degasser.cfg.lua` (этот путь зашит в программе)
+1. Поставь OpenOS (`install` с дискеты) и вставь Internet Card.
+2. Установщик:
+   ```
+   wget -f https://raw.githubusercontent.com/EugenPrinz/grade_7/main/install.lua /tmp/install.lua
+   /tmp/install.lua --autostart
+   ```
+   - Программа ставится в `/home/bin/degasser.lua`, конфиг — в `/home/degasser.cfg.lua` (этот путь зашит в программе).
+   - `--autostart` добавляет `degasser` в `/home/.shrc`.
+   - **Обновление:** запусти установщик ещё раз. Программа перезапишется, твой конфиг останется, а свежий шаблон ляжет рядом как `degasser.cfg.lua.new`.
+   - `--force-config` перезаписывает конфиг, старый сохраняется как `.bak`. `--ref=<ветка|тег|коммит>` ставит не из `main`.
+   - Скачанные файлы проверяются: они должны компилироваться и заканчиваться маркером `-- END <имя>`. Пишутся атомарно. Поэтому 404 или оборванная загрузка не испортят рабочую установку.
 
-   Через Internet Card:
-   ```
-   mkdir /home/bin
-   wget https://raw.githubusercontent.com/EugenPrinz/grade_7/main/degasser.lua /home/bin/degasser.lua
-   wget https://raw.githubusercontent.com/EugenPrinz/grade_7/main/degasser.cfg.lua /home/degasser.cfg.lua
-   ```
    Репозиторий должен быть публичным, иначе raw-ссылки не откроются.
 3. Запусти `degasser scan` и заполни конфиг:
    - **gt_machine.** Degasser узнаётся по строкам *control signal* и *Bit*. Его адрес → `machine`.
@@ -93,6 +94,8 @@
 ## Тесты
 
 `test/sim.lua` — модель Degasser по исходнику GT плюс моки OC API (component, transposer, gpu, event.timer). Запуск: `test/run.sh [циклов] [seed]`, нужен Lua 5.3 (`lua5.3` или `texlua`).
+
+`test/install_test.lua` — установщик на моках OpenOS: чистая установка, повтор, `--force-config`, 404, оборванная загрузка. Запуск: `texlua test/install_test.lua "$PWD" /tmp/inst`.
 
 Сценарии:
 

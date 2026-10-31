@@ -981,3 +981,4 @@ printStats()
 if not ok and not tostring(err):find("interrupted") then
   log("ERR", "%s", tostring(err))
 end
+-- END degasser.lua

@@ -57,3 +57,4 @@ return {
   logFile     = "/home/degasser.log",
   logMaxBytes = 64 * 1024,
 }
+-- END degasser.cfg.lua
