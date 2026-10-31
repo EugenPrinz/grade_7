@@ -1,5 +1,9 @@
 # degasser — CHANGELOG
 
+## 1.2.1 — 2026-10-31
+- Запас ME-сети читается через `component.invoke`, как в `degasser scan`. Исправлен случай, когда `scan` видит жидкости, а proxy-компонент не показывает метод `getFluidsInNetwork`.
+- Добавлен сценарий `iface-invoke` для этой ситуации.
+
 ## install.lua — 2026-10-31
 Установщик и обновлятор.
 - **Установка:** `degasser.lua` → `/home/bin`, конфиг → `/home`.
