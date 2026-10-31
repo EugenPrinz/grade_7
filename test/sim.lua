@@ -11,7 +11,10 @@ local CYCLE = 2400
 local GAP = 20 -- тиков простоя между циклами (контроллер плана)
 
 local FL = { coolant="supercoolant", helium="helium", neon="neon", krypton="krypton", xenon="xenon",
-             superconductor="molten.superconductoruevbase", neutronium="molten.neutronium" }
+             superconductor=(SCEN == "uv284") and "molten.longasssuperconductornameforuvwire"
+               or (SCEN == "uhv284") and "molten.longasssuperconductornameforuhvwire"
+               or "molten.superconductoruevbase",
+             neutronium="molten.neutronium" }
 local REQ = { [FL.coolant]=10000, [FL.helium]=10000, [FL.neon]=7500, [FL.krypton]=5000, [FL.xenon]=2500,
               [FL.superconductor]=1440, [FL.neutronium]=4608 }
 local GAS = { FL.helium, FL.neon, FL.krypton, FL.xenon }
@@ -196,7 +199,9 @@ comps["gt-0000-machine"] = {
     if not mach.running then return { "Linked to Purification Plant at 1, 2, 3", "Current parallel: 1,024" } end
     local ch = evaluate() and 100 or 0
     local mult = 1.0
-    if bit(mach.sig, 1) and not bit(mach.sig, 3) and mach.inserted[FL.superconductor] == REQ[FL.superconductor] then mult = 1.5 end
+    if bit(mach.sig, 1) and not bit(mach.sig, 3) and mach.inserted[FL.superconductor] == REQ[FL.superconductor] then
+      mult = (SCEN == "uv284") and 1.0 or (SCEN == "uhv284") and 1.25 or 1.5
+    end
     if SCEN == "rawkeys" then
       return { "GT5U.infodata.purification_unit_base.linked_at 1 2 3",
                "GT5U.infodata.purification_unit_base.success_chance §e" .. ch .. ".0%§r",
@@ -360,6 +365,13 @@ local chunk = assert(realLoadfile(PROG))
 chunk()
 
 print = realPrint
+if SCEN == "uv284" or SCEN == "uhv284" then
+  local f = assert(io.open(LOG, "r"))
+  local events = f:read("*a")
+  f:close()
+  local tier = (SCEN == "uv284") and "UV" or "UHV"
+  assert(events:find("SC base: " .. tier, 1, true), "2.8.4 " .. tier .. " base was not recognized")
+end
 local evaluated = mach.res.ok + mach.res.fail
 local hist = {}
 for _, s in ipairs(mach.failsWithSig) do hist[s] = (hist[s] or 0) + 1 end
