@@ -163,7 +163,9 @@ function M.run(title, original, path, keys, kind, labels)
   local gpu = component.gpu
   local saved = M.load(path)
   local cfg = M.apply(original, saved)
-  local session, problem = display.select(component, gpu, { width = 100, height = 30 })
+  local state = M.load("/home/waterline.state.lua")
+  local session, problem = display.select(component, gpu,
+    { width = 100, height = 30, preferred = state.screen })
   if not session then error("для привязки нужны GPU и экран T3: " .. tostring(problem), 0) end
   local w, h = session.width, session.height
   local notice = "Выбери роль. Enter/клик — выбор, S — сохранить, Esc — выход."
