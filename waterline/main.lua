@@ -61,13 +61,13 @@ function M.main(args)
   if cfg.ui ~= false and component.isAvailable("gpu") then
     gpu = component.gpu
     local w, h = gpu.maxResolution()
-    if w < 80 or h < 25 then gpu = nil end
+    if w < 160 or h < 50 then gpu = nil end
   end
   local oldW, oldH, w, h
   if gpu then
     oldW, oldH = gpu.getResolution()
     local maxW, maxH = gpu.maxResolution()
-    w, h = math.min(maxW, 100), math.min(maxH, 30)
+    w, h = 160, 50
     gpu.setResolution(w, h)
   end
   local selected = 1
@@ -135,7 +135,7 @@ function M.main(args)
     line(3, "Минимум по воде при 100% успехе. Параллели машин выставляются в их GUI.", COLORS.dim)
     for i, spec in ipairs(GRADES) do
       local slot = slots[spec.id]
-      local y = 5 + (i - 1) * 9
+      local y = 6 + (i - 1) * 19
       local mark = selected == i and "▶ " or "  "
       local state = active(slot) and (slot.stop and "ОСТАНАВЛИВАЕТСЯ" or "РАБОТАЕТ")
         or (slot.error and "ОШИБКА" or (slot.enabled and "ЗАПУСК" or "ВЫКЛЮЧЕН"))
@@ -151,7 +151,7 @@ function M.main(args)
         gpu.setBackground(COLORS.blue)
         gpu.fill(2, y + 2, math.max(1, math.floor((w - 4) * math.min(1, p / maxp))), 1, " ")
       else line(y + 2, "Машина ожидает цикл", COLORS.dim) end
-      for n = 1, 3 do line(y + 2 + n, slot.events[n] or "", COLORS.dim) end
+      for n = 1, 10 do line(y + 2 + n, slot.events[n] or "", COLORS.dim) end
     end
     line(h - 2, notice, COLORS.yellow)
     line(h, "[Space] ВКЛ/ВЫКЛ   [B] ПРИВЯЗКА   [P] ПЛАН ПАРАЛЛЕЛЕЙ   [Q] ВЫХОД", COLORS.green)
@@ -228,8 +228,8 @@ function M.main(args)
         elseif b == 113 or b == 81 or c == 1 then break end
       elseif name == "touch" and gpu and (not gpu.getScreen or a == gpu.getScreen()) then
         local x, y = b, c
-        if y >= 5 and y <= 10 then selected = 1
-        elseif y >= 14 and y <= 19 then selected = 2
+        if y >= 6 and y <= 20 then selected = 1
+        elseif y >= 25 and y <= 39 then selected = 2
         elseif y == h then
           if x < 29 then toggleSelected()
           elseif x < 54 then bindSelected()

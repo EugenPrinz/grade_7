@@ -161,11 +161,11 @@ function M.run(title, original, path, keys, kind, labels)
   if not component.isAvailable("gpu") then error("для привязки нужен GPU и монитор", 0) end
   local gpu = component.gpu
   local maxW, maxH = gpu.maxResolution()
-  if maxW < 80 or maxH < 25 then error("для привязки нужен экран не меньше 80x25", 0) end
+  if maxW < 160 or maxH < 50 then error("для привязки нужны GPU и экран T3 (160x50)", 0) end
   local saved = M.load(path)
   local cfg = M.apply(original, saved)
   local oldW, oldH = gpu.getResolution()
-  local w, h = math.min(maxW, 100), math.min(maxH, 30)
+  local w, h = 160, 50
   gpu.setResolution(w, h)
   local notice = "Выбери роль. Enter/клик — выбор, S — сохранить, Esc — выход."
   local screen = gpu.getScreen and gpu.getScreen() or nil

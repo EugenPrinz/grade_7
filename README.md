@@ -2,6 +2,8 @@
 
 `WaterLineProgram` запускает G7 и G8 на **одном компьютере или сервере** и даёт общий экран для управления модулями и привязки компонентов. **G7** автоматизирует Residual Decontaminant Degasser: читает сигнал Control Hatch и заливает точные объёмы. **G8** автоматизирует Absolute Baryonic Perfection: по одному вводит кварковые катализаторы до подтверждения правильной пары. G1–G6 можно будет добавить как отдельные модули позже.
 
+Для общего экрана и окна привязки нужны **GPU T3 и монитор T3 с разрешением 160×50**. Без них автоматизация может работать в текстовом режиме, но экранная привязка не откроется.
+
 Механика сверена с [исходником G7](https://github.com/GTNewHorizons/GT5-Unofficial/blob/5.09.54.265/src/main/java/gregtech/common/tileentities/machines/multi/purification/MTEPurificationUnitDegasser.java) и [исходником G8](https://github.com/GTNewHorizons/GT5-Unofficial/blob/5.09.54.265/src/main/java/gregtech/common/tileentities/machines/multi/purification/MTEPurificationUnitBaryonicPerfection.java) из GT5-Unofficial 5.09.54.265, входящего в GTNH 2.9. Подробности — в [CHANGELOG.md](CHANGELOG.md).
 
 | Сигнал | Вероятность | Залить |

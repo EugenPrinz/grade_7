@@ -1,7 +1,7 @@
 -- Shared program starts, toggles, binds and stops grade workers on one computer.
 local starts, binds, saved = { g7 = 0, g8 = 0 }, { g7 = 0, g8 = 0 }, nil
 local events = {
-  { "touch", "screen", 5, 14, 0 }, -- select G8
+  { "touch", "screen", 5, 25, 0 }, -- select G8
   { "key_down", "kb", 32, 57 }, -- enable G8
   { "key_down", "kb", 98, 48 }, -- bind G8 (stop, bind, restart)
   {}, -- scheduler tick while waiting for G8 to stop
@@ -16,7 +16,7 @@ local pulls = 0
 package.loaded.component = {
   isAvailable = function(t) return t == "gpu" end,
   gpu = {
-    maxResolution = function() return 100, 30 end,
+    maxResolution = function() return 160, 50 end,
     getResolution = function() return 80, 25 end,
     setResolution = function() end, setBackground = function() end,
     setForeground = function() end, fill = function() end, set = function() end,
