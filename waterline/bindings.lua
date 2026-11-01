@@ -4,6 +4,7 @@ local event = require("event")
 local fs = require("filesystem")
 local sides = require("sides")
 local unicode = require("unicode")
+local display = require("waterline.display")
 
 local M = {}
 local SIDE_NAMES = { "down", "up", "north", "south", "west", "east" }
@@ -160,13 +161,11 @@ end
 function M.run(title, original, path, keys, kind, labels)
   if not component.isAvailable("gpu") then error("для привязки нужен GPU и монитор", 0) end
   local gpu = component.gpu
-  local maxW, maxH = gpu.maxResolution()
-  if maxW < 160 or maxH < 50 then error("для привязки нужны GPU и экран T3 (160x50)", 0) end
   local saved = M.load(path)
   local cfg = M.apply(original, saved)
-  local oldW, oldH = gpu.getResolution()
-  local w, h = 160, 50
-  gpu.setResolution(w, h)
+  local session, problem = display.select(component, gpu, { width = 100, height = 30 })
+  if not session then error("для привязки нужны GPU и экран T3: " .. tostring(problem), 0) end
+  local w, h = session.width, session.height
   local notice = "Выбери роль. Enter/клик — выбор, S — сохранить, Esc — выход."
   local screen = gpu.getScreen and gpu.getScreen() or nil
 
@@ -298,9 +297,7 @@ function M.run(title, original, path, keys, kind, labels)
     end
   end
   local ok, result = xpcall(main, function(err) return tostring(err) end)
-  gpu.setBackground(0x000000); gpu.setForeground(0xFFFFFF)
-  gpu.setResolution(oldW, oldH)
-  gpu.fill(1, 1, oldW, oldH, " ")
+  display.restore(session)
   if not ok then error(result, 0) end
   return result
 end

@@ -19,6 +19,7 @@ local CFG     = "/home/degasser.cfg.lua"
 local SHRC    = "/home/.shrc"
 local PROGRAMS = {
   { name = "waterline/bindings.lua", target = "/home/lib/waterline/bindings.lua" },
+  { name = "waterline/display.lua", target = "/home/lib/waterline/display.lua" },
   { name = "waterline/parallel.lua", target = "/home/lib/waterline/parallel.lua" },
   { name = "waterline/main.lua", target = "/home/lib/waterline/main.lua" },
   { name = "waterline/g7.lua", target = "/home/lib/waterline/g7.lua" },

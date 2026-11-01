@@ -6,6 +6,6 @@ return {
   },
   baseGrade = 7,
   baseParallel = 1, -- planning only; set the actual value in the machine GUI
-  ui = true, -- GPU T3 + screen T3 (160x50); false = text log
+  ui = true, -- GPU T3 + screen T3; dashboard uses 100x30 for larger text
 }
 -- END waterline.cfg.lua

@@ -1,7 +1,8 @@
 -- Shared program starts, toggles, binds and stops grade workers on one computer.
 local starts, binds, saved = { g7 = 0, g8 = 0 }, { g7 = 0, g8 = 0 }, nil
+local currentScreen, selectedLarge = "small", false
 local events = {
-  { "touch", "screen", 5, 25, 0 }, -- select G8
+  { "touch", "large", 5, 15, 0 }, -- select G8
   { "key_down", "kb", 32, 57 }, -- enable G8
   { "key_down", "kb", 98, 48 }, -- bind G8 (stop, bind, restart)
   {}, -- scheduler tick while waiting for G8 to stop
@@ -15,12 +16,22 @@ local workers = {}
 local pulls = 0
 package.loaded.component = {
   isAvailable = function(t) return t == "gpu" end,
+  list = function(t)
+    assert(t == "screen")
+    local items, index = { "small", "large" }, 0
+    return function() index = index + 1; return items[index] end
+  end,
   gpu = {
     maxResolution = function() return 160, 50 end,
     getResolution = function() return 80, 25 end,
-    setResolution = function() end, setBackground = function() end,
+    getSize = function() if currentScreen == "large" then return 3, 2 end; return 1, 1 end,
+    bind = function(address) currentScreen = address; return true end,
+    setResolution = function(w, h)
+      if currentScreen == "large" and w == 100 and h == 30 then selectedLarge = true end
+      return true
+    end, setBackground = function() end,
     setForeground = function() end, fill = function() end, set = function() end,
-    getScreen = function() return "screen" end,
+    getScreen = function() return currentScreen end,
   },
 }
 package.loaded.unicode = { sub = function(s, i, j) return s:sub(i, j) end }
@@ -69,6 +80,7 @@ loadfile = function(p)
   return originalLoadfile(p)
 end
 require("waterline.main").main({})
+assert(selectedLarge and currentScreen == "small", "large monitor was not selected and restored")
 assert(starts.g7 == 1 and starts.g8 == 2, "workers did not start/restart as expected")
 assert(binds.g8 == 1 and binds.g7 == 0, "selected G8 binding was not opened")
 assert(saved and saved.enabled.g7 and saved.enabled.g8, "module toggle was not saved")

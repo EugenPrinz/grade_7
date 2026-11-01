@@ -2,6 +2,7 @@
 local component = require("component")
 local event = require("event")
 local bindings = require("waterline.bindings")
+local display = require("waterline.display")
 local parallel = require("waterline.parallel")
 local unicode = require("unicode")
 
@@ -28,6 +29,7 @@ local function loadConfig()
   end
   cfg.baseGrade = state.baseGrade or cfg.baseGrade or 7
   cfg.baseParallel = state.baseParallel or cfg.baseParallel or 1
+  cfg.screen = state.screen or cfg.screen
   return cfg
 end
 
@@ -42,6 +44,24 @@ end
 
 function M.main(args)
   if args[1] == "bind" or args[1] == "scan" then return command(args[1], args[2]) end
+  if args[1] == "screens" then
+    if not component.isAvailable("gpu") then error("GPU не найден", 0) end
+    for _, screen in ipairs(display.probe(component, component.gpu)) do
+      print(string.format("%s  %dx%d блоков  максимум %dx%d",
+        screen.address, screen.blocksW, screen.blocksH, screen.maxW, screen.maxH))
+    end
+    return
+  end
+  if args[1] == "screen" then
+    local address = args[2] and component.get(args[2], "screen")
+    if not address then error("экран не найден; см. WaterLineProgram screens", 0) end
+    local state = bindings.load(STATE_PATH)
+    state.screen = address
+    local ok, err = bindings.save(STATE_PATH, state)
+    if not ok then error(tostring(err), 0) end
+    print("Выбран экран " .. address)
+    return
+  end
   if args[1] == "plan" then
     local grade = tonumber(tostring(args[2] or ""):match("%d+"))
     local plan = parallel.plan(grade, tonumber(args[3]))
@@ -50,33 +70,32 @@ function M.main(args)
     return
   end
   if args[1] == "help" then
-    print("WaterLineProgram [bind|scan g7|g8] | plan g7|g8 N")
+    print("WaterLineProgram [bind|scan g7|g8] | plan g7|g8 N | screens | screen ADDRESS")
     return
   end
   if args[1] then error("неизвестная команда: " .. tostring(args[1]), 0) end
 
   local cfg = loadConfig()
   local thread = require("thread")
-  local gpu
+  local gpu, displaySession
   if cfg.ui ~= false and component.isAvailable("gpu") then
     gpu = component.gpu
-    local w, h = gpu.maxResolution()
-    if w < 160 or h < 50 then gpu = nil end
+    local problem
+    displaySession, problem = display.select(component, gpu,
+      { width = 100, height = 30, preferred = cfg.screen })
+    if not displaySession then
+      print("Экран недоступен: " .. tostring(problem) .. ". Работаю в текстовом режиме.")
+      gpu = nil
+    end
   end
-  local oldW, oldH, w, h
-  if gpu then
-    oldW, oldH = gpu.getResolution()
-    local maxW, maxH = gpu.maxResolution()
-    w, h = 160, 50
-    gpu.setResolution(w, h)
-  end
+  local w, h = 100, 30
   local selected = 1
   local slots = {}
   for _, spec in ipairs(GRADES) do
     slots[spec.id] = { spec = spec, enabled = cfg.enabled[spec.id] == true,
       stop = false, status = { phase = "не запущен" }, events = {} }
   end
-  local notice = "1/2 — grade · Space — вкл/выкл · B — привязка · P — план параллелей · Q — выход"
+  local notice = "1/2 — grade · Space — вкл/выкл · B — привязка · P — план · M — экран · Q — выход"
 
   local function addLog(slot, level, message)
     local entry = string.format("%s %-4s %s", os.date("%H:%M:%S"), level, message)
@@ -114,7 +133,7 @@ function M.main(args)
   local function saveState()
     local ok, err = bindings.save(STATE_PATH, { enabled = {
       g7 = slots.g7.enabled, g8 = slots.g8.enabled,
-    }, baseGrade = cfg.baseGrade, baseParallel = cfg.baseParallel })
+    }, baseGrade = cfg.baseGrade, baseParallel = cfg.baseParallel, screen = cfg.screen })
     if not ok then notice = "Не удалось сохранить включённые модули: " .. tostring(err) end
   end
 
@@ -127,7 +146,8 @@ function M.main(args)
   local function draw()
     if not gpu then return end
     gpu.setBackground(COLORS.bg); gpu.fill(1, 1, w, h, " ")
-    line(1, "WaterLineProgram · GTNH 2.9 · G7 + G8", COLORS.blue, COLORS.head)
+    local screenName = displaySession and displaySession.selected.address:sub(1, 8) or "—"
+    line(1, "WaterLineProgram · GTNH 2.9 · G7 + G8 · экран " .. screenName, COLORS.blue, COLORS.head)
     local plan = parallel.plan(cfg.baseGrade, cfg.baseParallel)
     local values = {}
     for g = 1, 8 do values[#values + 1] = "G" .. g .. "×" .. plan[g] end
@@ -135,7 +155,7 @@ function M.main(args)
     line(3, "Минимум по воде при 100% успехе. Параллели машин выставляются в их GUI.", COLORS.dim)
     for i, spec in ipairs(GRADES) do
       local slot = slots[spec.id]
-      local y = 6 + (i - 1) * 19
+      local y = 5 + (i - 1) * 10
       local mark = selected == i and "▶ " or "  "
       local state = active(slot) and (slot.stop and "ОСТАНАВЛИВАЕТСЯ" or "РАБОТАЕТ")
         or (slot.error and "ОШИБКА" or (slot.enabled and "ЗАПУСК" or "ВЫКЛЮЧЕН"))
@@ -151,10 +171,37 @@ function M.main(args)
         gpu.setBackground(COLORS.blue)
         gpu.fill(2, y + 2, math.max(1, math.floor((w - 4) * math.min(1, p / maxp))), 1, " ")
       else line(y + 2, "Машина ожидает цикл", COLORS.dim) end
-      for n = 1, 10 do line(y + 2 + n, slot.events[n] or "", COLORS.dim) end
+      for n = 1, 4 do line(y + 2 + n, slot.events[n] or "", COLORS.dim) end
     end
     line(h - 2, notice, COLORS.yellow)
-    line(h, "[Space] ВКЛ/ВЫКЛ   [B] ПРИВЯЗКА   [P] ПЛАН ПАРАЛЛЕЛЕЙ   [Q] ВЫХОД", COLORS.green)
+    line(h, "[Space] ВКЛ/ВЫКЛ  [B] ПРИВЯЗКА  [P] ПЛАН  [M] ЭКРАН  [Q] ВЫХОД", COLORS.green)
+  end
+
+  local function cycleScreen()
+    if not gpu or not displaySession then return end
+    local available = {}
+    for _, screen in ipairs(displaySession.screens) do
+      if screen.maxW >= w and screen.maxH >= h then available[#available + 1] = screen end
+    end
+    if #available < 2 then notice = "Подключён только один экран"; return end
+    local index = 1
+    for i, screen in ipairs(available) do
+      if screen.address == displaySession.selected.address then index = i; break end
+    end
+    local address = available[index % #available + 1].address
+    display.restore(displaySession)
+    local nextSession, err = display.select(component, gpu,
+      { width = 100, height = 30, preferred = address })
+    if not nextSession then
+      displaySession = display.select(component, gpu,
+        { width = w, height = h, preferred = displaySession.selected.address })
+      notice = "Не удалось выбрать экран: " .. tostring(err)
+      return
+    end
+    displaySession = nextSession
+    cfg.screen = address
+    saveState()
+    notice = "Экран " .. address:sub(1, 8) .. " выбран"
   end
 
   local function editParallel()
@@ -225,14 +272,17 @@ function M.main(args)
         elseif b == 32 then toggleSelected()
         elseif b == 98 or b == 66 then bindSelected()
         elseif b == 112 or b == 80 then editParallel()
+        elseif b == 109 or b == 77 then cycleScreen()
         elseif b == 113 or b == 81 or c == 1 then break end
       elseif name == "touch" and gpu and (not gpu.getScreen or a == gpu.getScreen()) then
         local x, y = b, c
-        if y >= 6 and y <= 20 then selected = 1
-        elseif y >= 25 and y <= 39 then selected = 2
+        if y >= 5 and y <= 12 then selected = 1
+        elseif y >= 15 and y <= 22 then selected = 2
         elseif y == h then
-          if x < 29 then toggleSelected()
-          elseif x < 54 then bindSelected()
+          if x < 20 then toggleSelected()
+          elseif x < 40 then bindSelected()
+          elseif x < 56 then editParallel()
+          elseif x < 70 then cycleScreen()
           else break end
         end
       end
@@ -242,10 +292,7 @@ function M.main(args)
     while active(slots.g7) or active(slots.g8) do draw(); event.pull(0.5) end
   end
   local ok, err = xpcall(run, function(e) return tostring(e) end)
-  if gpu then
-    gpu.setBackground(0x000000); gpu.setForeground(0xFFFFFF)
-    gpu.setResolution(oldW, oldH); gpu.fill(1, 1, oldW, oldH, " ")
-  end
+  if displaySession then display.restore(displaySession) end
   if not ok then error(err, 0) end
 end
 
