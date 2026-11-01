@@ -11,7 +11,8 @@ local CYCLE = 2400
 local GAP = 20 -- тиков простоя между циклами (контроллер плана)
 
 local FL = { coolant="supercoolant", helium="helium", neon="neon", krypton="krypton", xenon="xenon",
-             superconductor=(SCEN == "uv284") and "molten.longasssuperconductornameforuvwire"
+             superconductor=(SCEN == "uv29" or SCEN == "uv29legacy") and "molten.superconductoruvbase"
+               or (SCEN == "uv284") and "molten.longasssuperconductornameforuvwire"
                or (SCEN == "uhv284") and "molten.longasssuperconductornameforuhvwire"
                or "molten.superconductoruevbase",
              neutronium="molten.neutronium" }
@@ -200,7 +201,8 @@ comps["gt-0000-machine"] = {
     local ch = evaluate() and 100 or 0
     local mult = 1.0
     if bit(mach.sig, 1) and not bit(mach.sig, 3) and mach.inserted[FL.superconductor] == REQ[FL.superconductor] then
-      mult = (SCEN == "uv284") and 1.0 or (SCEN == "uhv284") and 1.25 or 1.5
+      mult = (SCEN == "uv284" or SCEN == "uv29" or SCEN == "uv29legacy") and 1.0
+        or (SCEN == "uhv284") and 1.25 or 1.5
     end
     if SCEN == "rawkeys" then
       return { "GT5U.infodata.purification_unit_base.linked_at 1 2 3",
@@ -351,7 +353,8 @@ loadfile = function(p)
           neon           = { transposer = "tA", from = sides.east,  to = sides.up },
           krypton        = { transposer = "tA", from = sides.west,  to = sides.up },
           xenon          = { transposer = "tB", from = sides.north, to = sides.up },
-          superconductor = { transposer = "tB", from = sides.south, to = sides.up },
+          superconductor = { transposer = "tB", from = sides.south, to = sides.up,
+            fluid = (SCEN == "uv29legacy") and "molten.longasssuperconductornameforuvwire" or nil },
           neutronium     = { transposer = "tB", from = sides.east,  to = sides.up },
         },
         logFile = LOG, logMaxBytes = 10^9, outputPerParallel = 900, ui = (SCEN ~= "noui"),
@@ -370,11 +373,11 @@ local chunk = assert(realLoadfile(PROG))
 chunk()
 
 print = realPrint
-if SCEN == "uv284" or SCEN == "uhv284" then
+if SCEN == "uv284" or SCEN == "uhv284" or SCEN == "uv29" or SCEN == "uv29legacy" then
   local f = assert(io.open(LOG, "r"))
   local events = f:read("*a")
   f:close()
-  local tier = (SCEN == "uv284") and "UV" or "UHV"
+  local tier = (SCEN == "uhv284") and "UHV" or "UV"
   assert(events:find("SC base: " .. tier, 1, true), "2.8.4 " .. tier .. " base was not recognized")
 end
 if SCEN == "iface-invoke" then

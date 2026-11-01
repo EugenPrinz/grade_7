@@ -3,7 +3,13 @@
 local REPO_DIR, ROOT = arg[1], arg[2]
 local realOpen = io.open
 local function real(p) return ROOT .. p end
-os.execute("rm -rf '" .. ROOT .. "' && mkdir -p '" .. ROOT .. "/home'")
+local win = package.config:sub(1, 1) == "\\"
+local function mkdir(p)
+  if win then os.execute('mkdir "' .. p:gsub("/", "\\") .. '" >NUL 2>&1')
+  else os.execute('mkdir -p "' .. p .. '"') end
+end
+mkdir(real("/home"))
+local directories = { ["/home"] = true }
 
 local MODE = "ok" -- ok | 404 | broken
 local function readLocal(name)
@@ -14,7 +20,7 @@ local mocks = {
   component = { isAvailable = function(t) return t == "internet" end },
   internet = {
     request = function(url)
-      local name = url:match("/([^/]+)$")
+      local name = url:match("/grade_7/[^/]+/(.+)$")
       local body
       if MODE == "404" then body = "404: Not Found"
       elseif MODE == "broken" then body = readLocal(name):sub(1, 500)
@@ -25,8 +31,8 @@ local mocks = {
   },
   filesystem = {
     exists = function(p) local f = realOpen(real(p)) if f then f:close() return true end
-      return os.execute("test -d '" .. real(p) .. "'") == true end,
-    makeDirectory = function(p) return os.execute("mkdir -p '" .. real(p) .. "'") end,
+      return directories[p] == true end,
+    makeDirectory = function(p) mkdir(real(p)); directories[p] = true; return true end,
     remove = function(p) return os.remove(real(p)) end,
     rename = function(a, b) return os.rename(real(a), real(b)) end,
     path = function(p) return p:match("^(.*/)[^/]*$") end,
@@ -69,16 +75,32 @@ io.stderr = { write = function(_, s) out[#out + 1] = s end }
 local ok, e1 = run("--autostart"); if not ok then realPrint("ERR:", e1, table.concat(out, " | ")) end
 check(ok, "чистая установка без ошибок")
 check(exists("/home/bin/degasser.lua") and read("/home/bin/degasser.lua") == readLocal("degasser.lua"), "программа записана целиком")
+check(exists("/home/bin/grade8.lua") and read("/home/bin/grade8.lua") == readLocal("grade8.lua"), "Grade 8 установлен")
+check(exists("/home/bin/WaterLineProgram.lua")
+  and read("/home/bin/WaterLineProgram.lua") == readLocal("WaterLineProgram.lua"), "общая программа установлена")
+check(exists("/home/lib/waterline/g7.lua") and exists("/home/lib/waterline/g8.lua")
+  and exists("/home/lib/waterline/bindings.lua") and exists("/home/lib/waterline/main.lua")
+  and exists("/home/lib/waterline/parallel.lua"), "общие модули установлены")
 check(exists("/home/degasser.cfg.lua"), "конфиг создан")
-check(read("/home/.shrc") == "degasser\n", "автозапуск добавлен")
+check(exists("/home/grade8.cfg.lua"), "конфиг G8 создан")
+check(exists("/home/waterline.cfg.lua"), "конфиг общей программы создан")
+check(read("/home/.shrc") == "WaterLineProgram\n", "автозапуск добавлен")
 
 -- 2. повтор: конфиг пользователя не трогается, автозапуск не дублируется
 local f = realOpen(real("/home/degasser.cfg.lua"), "w"); f:write("-- мой конфиг\nreturn {}\n"); f:close()
+local b = realOpen(real("/home/degasser.bindings.lua"), "w"); b:write("return {machine='mine'}\n"); b:close()
+local s = realOpen(real("/home/waterline.state.lua"), "w"); s:write("return {enabled={g8=true}}\n"); s:close()
+local oldSh = realOpen(real("/home/.shrc"), "w"); oldSh:write("degasser\n"); oldSh:close()
 ok = run("--autostart")
 check(ok, "повторная установка без ошибок")
 check(read("/home/degasser.cfg.lua") == "-- мой конфиг\nreturn {}\n", "пользовательский конфиг сохранён")
 check(exists("/home/degasser.cfg.lua.new"), "свежий шаблон в .new")
-check(read("/home/.shrc") == "degasser\n", "автозапуск не задублирован")
+check(exists("/home/grade8.cfg.lua.new"), "свежий шаблон G8 в .new")
+check(exists("/home/waterline.cfg.lua.new"), "свежий шаблон общей программы в .new")
+check(read("/home/degasser.bindings.lua") == "return {machine='mine'}\n", "привязки сохранены")
+check(read("/home/waterline.state.lua") == "return {enabled={g8=true}}\n", "активные модули сохранены")
+check(read("/home/.shrc") == "WaterLineProgram\n"
+  and read("/home/.shrc.bak") == "degasser\n", "старый автозапуск мигрирован")
 
 -- 3. --force-config
 ok = run("--force-config")

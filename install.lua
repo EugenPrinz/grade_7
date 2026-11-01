@@ -1,22 +1,37 @@
--- install.lua — установщик/обновлятор degasser (GTNH Grade 7) для OpenComputers
+-- install.lua — установщик/обновлятор Grade 7 + Grade 8 для OpenComputers
 -- Запуск:
 --   wget -f https://raw.githubusercontent.com/EugenPrinz/grade_7/main/install.lua /tmp/install.lua
 --   /tmp/install.lua [--autostart] [--force-config] [--ref <ветка|тег|коммит>]
 --
---   --autostart     добавить запуск degasser в /home/.shrc
+--   --autostart     добавить запуск WaterLineProgram в /home/.shrc
 --   --force-config  перезаписать конфиг (старый сохранится как .bak)
 --   --ref X         ставить из ветки/тега/коммита X (по умолчанию main)
 --
--- Повторный запуск = обновление: программа перезаписывается, конфиг остаётся
--- (свежий шаблон кладётся рядом как degasser.cfg.lua.new).
+-- Повторный запуск обновляет программы и модули. Конфиги и привязки сохраняются.
 local component = require("component")
 local fs        = require("filesystem")
 local shell     = require("shell")
 
 local REPO    = "EugenPrinz/grade_7"
 local PROG    = "/home/bin/degasser.lua"
+local MAIN    = "/home/bin/WaterLineProgram.lua"
 local CFG     = "/home/degasser.cfg.lua"
 local SHRC    = "/home/.shrc"
+local PROGRAMS = {
+  { name = "waterline/bindings.lua", target = "/home/lib/waterline/bindings.lua" },
+  { name = "waterline/parallel.lua", target = "/home/lib/waterline/parallel.lua" },
+  { name = "waterline/main.lua", target = "/home/lib/waterline/main.lua" },
+  { name = "waterline/g7.lua", target = "/home/lib/waterline/g7.lua" },
+  { name = "waterline/g8.lua", target = "/home/lib/waterline/g8.lua" },
+  { name = "degasser.lua", target = PROG },
+  { name = "grade8.lua", target = "/home/bin/grade8.lua" },
+  { name = "WaterLineProgram.lua", target = MAIN },
+}
+local CONFIGS = {
+  { name = "degasser.cfg.lua", target = CFG },
+  { name = "grade8.cfg.lua", target = "/home/grade8.cfg.lua" },
+  { name = "waterline.cfg.lua", target = "/home/waterline.cfg.lua" },
+}
 
 local args, opts = shell.parse(...)
 local ref = opts.ref or "main"
@@ -80,60 +95,82 @@ local function copyFile(src, dst)
   return writeFile(dst, data)
 end
 
-print(string.format("degasser: установка из %s@%s", REPO, ref))
+print(string.format("waterline: установка из %s@%s", REPO, ref))
 
--- 1. программа
-io.write("  degasser.lua ... ")
-local prog, err = fetch("degasser.lua")
-if not prog then die("не скачалось: " .. err) end
-local ok, cerr = checkLua("degasser.lua", prog)
-if not ok then die(cerr) end
-local version = prog:match('local VERSION%s*=%s*"([^"]+)"') or "?"
-local wok, werr = writeFile(PROG, prog)
-if not wok then die("не записалось " .. PROG .. ": " .. tostring(werr)) end
-print("v" .. version .. " -> " .. PROG)
+-- Download and validate everything before replacing the installed programs.
+local downloaded = {}
+for _, file in ipairs(PROGRAMS) do
+  io.write("  " .. file.name .. " ... ")
+  local src, err = fetch(file.name)
+  if not src then die(file.name .. ": не скачалось: " .. err) end
+  local ok, why = checkLua(file.name, src)
+  if not ok then die(file.name .. ": " .. why) end
+  downloaded[file.name] = src
+  print("OK")
+end
+for _, file in ipairs(CONFIGS) do
+  io.write("  " .. file.name .. " ... ")
+  local src, err = fetch(file.name)
+  if not src then die(file.name .. ": не скачалось: " .. err) end
+  local ok, why = checkLua(file.name, src)
+  if not ok then die(file.name .. ": " .. why) end
+  downloaded[file.name] = src
+  print("OK")
+end
 
--- 2. конфиг
-io.write("  degasser.cfg.lua ... ")
-local cfg, ferr = fetch("degasser.cfg.lua")
-if not cfg then die("не скачалось: " .. ferr) end
-ok, cerr = checkLua("degasser.cfg.lua", cfg)
-if not ok then die(cerr) end
-if not fs.exists(CFG) then
-  writeFile(CFG, cfg)
-  print("создан " .. CFG)
-elseif opts["force-config"] then
-  copyFile(CFG, CFG .. ".bak")
-  writeFile(CFG, cfg)
-  print("перезаписан (старый -> " .. CFG .. ".bak)")
-else
-  writeFile(CFG .. ".new", cfg)
-  print("оставлен твой; свежий шаблон -> " .. CFG .. ".new")
+-- Modules first, launchers last.
+for _, file in ipairs(PROGRAMS) do
+  local ok, err = writeFile(file.target, downloaded[file.name])
+  if not ok then die("не записалось " .. file.target .. ": " .. tostring(err)) end
+  print("  установлен " .. file.target)
+end
+for _, file in ipairs(CONFIGS) do
+  local target = file.target
+  if not fs.exists(target) then
+    local ok, err = writeFile(target, downloaded[file.name])
+    if not ok then die("не записалось " .. target .. ": " .. tostring(err)) end
+    print("  создан " .. target)
+  elseif opts["force-config"] then
+    if not copyFile(target, target .. ".bak") then die("не удалось сохранить " .. target .. ".bak") end
+    local ok, err = writeFile(target, downloaded[file.name])
+    if not ok then die("не записалось " .. target .. ": " .. tostring(err)) end
+    print("  перезаписан " .. target .. " (старый -> .bak)")
+  else
+    local ok, err = writeFile(target .. ".new", downloaded[file.name])
+    if not ok then die("не записалось " .. target .. ".new: " .. tostring(err)) end
+    print("  оставлен " .. target .. "; свежий шаблон -> .new")
+  end
 end
 
 -- 3. автозапуск
 if opts.autostart then
-  local has = false
+  local lines, has, migrated = {}, false, false
   local f = io.open(SHRC, "r")
   if f then
     for line in f:lines() do
-      if line:match("^%s*degasser%s*$") or line:match("^%s*" .. PROG:gsub("%p", "%%%0") .. "%s*$") then has = true end
+      if line:match("^%s*WaterLineProgram%s*$")
+        or line:match("^%s*" .. MAIN:gsub("%p", "%%%0") .. "%s*$") then
+        if not has then lines[#lines + 1] = "WaterLineProgram" end
+        has = true
+      elseif line:match("^%s*degasser%s*$")
+        or line:match("^%s*" .. PROG:gsub("%p", "%%%0") .. "%s*$") then
+        migrated = true -- old standalone autostart is replaced by the shared program
+      else lines[#lines + 1] = line end
     end
     f:close()
   end
-  if has then
-    print("  автозапуск: уже есть в " .. SHRC)
-  else
-    local a = io.open(SHRC, "a")
-    a:write("degasser\n")
-    a:close()
-    print("  автозапуск: добавлен в " .. SHRC)
-  end
+  if not has then lines[#lines + 1] = "WaterLineProgram" end
+  if migrated and not copyFile(SHRC, SHRC .. ".bak") then die("не удалось сохранить " .. SHRC .. ".bak") end
+  local ok, err = writeFile(SHRC, table.concat(lines, "\n") .. "\n")
+  if not ok then die("не записалось " .. SHRC .. ": " .. tostring(err)) end
+  print("  автозапуск: " .. (migrated and "старый degasser заменён" or (has and "уже настроен" or "добавлен")))
 end
 
 print("")
 print("Дальше:")
-print("  1. degasser scan                 — адреса, стороны, жидкости")
-print("  2. edit " .. CFG .. "  — заполнить machine / redstone / me / routes")
-print("  3. degasser                      — запуск")
-print("Обновление: повтори установщик (конфиг не трогается).")
+print("  WaterLineProgram bind g7|g8 — привязать компоненты через экран")
+print("  WaterLineProgram           — запустить общий контроллер")
+print("  WaterLineProgram plan g7 10 — рассчитать минимум параллелей по воде")
+print("  degasser и grade8 оставлены для отдельного запуска/диагностики.")
+print("  scan доступен у обеих программ. Привязки сохраняются отдельно от конфигов.")
+print("  Повторный запуск установщика обновляет код, сохраняя настройки.")

@@ -6,6 +6,6 @@ cd "$(dirname "$0")"
 LUA=$(command -v lua5.3 || command -v texlua || command -v lua)
 mkdir -p out && cd out
 CYC=${1:-300}; SEED=${2:-1}
-for sc in normal rawkeys smallhatch midstart noise t2screen lowstock iface iface-nome iface-dry; do
-  "$LUA" ../sim.lua ../../degasser.lua "$sc" "$CYC" "$SEED" | tail -1
+for sc in normal rawkeys smallhatch midstart noise t2screen lowstock iface iface-nome iface-dry uv284 uhv284 uv29 uv29legacy iface-invoke; do
+  LUA_PATH="../../?.lua;../../?/init.lua;;" "$LUA" ../sim.lua ../../degasser.lua "$sc" "$CYC" "$SEED" | tail -1
 done
