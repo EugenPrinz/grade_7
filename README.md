@@ -123,7 +123,7 @@ G8 пока проверен симуляцией: пользовательск�
 
 ## Тесты
 
-`test/sim.lua` — модель G7 по исходнику GT плюс моки OC API. `test/g8_sim.lua` проверяет все 15 возможных скрытых пар G8 и последовательную подачу. `test/bindings_test.lua` проверяет экран привязки для жидкости и предмета; `test/main_test.lua` — совместный запуск модулей; `test/parallel_test.lua` — расчёт воды. Запуск: `test/run.sh [циклов] [seed]` и `lua test/*_test.lua` по одному файлу.
+`test/sim.lua` — модель G7 по исходнику GT плюс моки OC API. `test/g8_sim.lua` моделирует 120-секундный цикл G8: все 15 скрытых пар, стоимость повторных катализаторов в Molten Infinity, возврат лишних предметов, выход воды и барионной материи, пустые источники и тайм-аут. `test/bindings_test.lua` проверяет экран привязки для жидкости и предмета; `test/main_test.lua` — совместный запуск модулей; `test/parallel_test.lua` — расчёт воды. Запуск: `test/run.sh [циклов] [seed]`, `lua test/g8_sim.lua` и `lua test/*_test.lua` по одному файлу. Для конкретной пары и параллелей: `lua test/g8_sim.lua up down 4`.
 
 `test/install_test.lua` — установщик на моках OpenOS: чистая установка, повтор, `--force-config`, 404, оборванная загрузка. Запуск: `texlua test/install_test.lua "$PWD" /tmp/inst`.
 
