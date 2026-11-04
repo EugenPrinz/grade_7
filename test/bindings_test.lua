@@ -105,4 +105,45 @@ local item = binding.load(path).routes.up
 assert(item.transposer == trans.address and item.from == sides.north and item.to == sides.up
   and item.slot == 1, "G8 item source/slot binding was not saved")
 os.remove(path)
+
+-- New role form (G4 / G6): per-role kind, identity item without a slot, whole-inventory source.
+local function ser(v)
+  if type(v) == "table" then
+    local parts = {}
+    for k, x in pairs(v) do parts[#parts + 1] = "[" .. ser(k) .. "]=" .. ser(x) end
+    return "{" .. table.concat(parts, ",") .. "}"
+  end
+  return type(v) == "string" and string.format("%q", v) or tostring(v)
+end
+package.loaded.serialization = { serialize = ser }
+keys = {
+  { "touch", "screen", 4, 5, 0 }, -- role 3: naoh (after controller, ME)
+  { "key_down", "kb", 0, 28 }, -- transposer
+  { "key_down", "kb", 0, 208 }, -- north source
+  { "key_down", "kb", 0, 28 },
+  { "key_down", "kb", 0, 28 }, -- slot 1 defines the item identity
+  { "key_down", "kb", 0, 28 }, -- up destination
+  { "touch", "screen", 4, 6, 0 }, -- role 4: lens chest
+  { "key_down", "kb", 0, 28 }, -- transposer
+  { "key_down", "kb", 0, 208 }, -- north source, no slot question
+  { "key_down", "kb", 0, 28 },
+  { "key_down", "kb", 0, 28 }, -- up destination
+  { "key_down", "kb", 115, 31 }, -- save
+  { "key_down", "kb", 0, 1 }, -- exit
+}
+local roles = {
+  { id = "naoh", kind = "item", slot = "identity", label = "Sodium Hydroxide Dust" },
+  { id = "lens", kind = "item", slot = "any", label = "Линзы" },
+  { id = "hcl", kind = "fluid", label = "HCl" },
+}
+binding.run("G4", { routes = {} }, path, roles, { me = true })
+local r = binding.load(path).routes
+assert(r.naoh and r.naoh.from == sides.north and r.naoh.to == sides.up and r.naoh.slot == nil,
+  "identity item route was not saved")
+assert(r.naoh.item and r.naoh.item.damage == 32235 and r.naoh.item.label == "Up Quark",
+  "item identity was not captured from the chosen slot")
+assert(r.lens and r.lens.from == sides.north and r.lens.slot == nil and r.lens.item == nil,
+  "whole-inventory route must not store a slot or identity")
+assert(#keys == 0, "binding UI asked for unexpected input")
+os.remove(path); os.remove(path .. ".bak")
 print("binding UI: OK")

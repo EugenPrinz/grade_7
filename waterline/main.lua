@@ -5,14 +5,12 @@ local bindings = require("waterline.bindings")
 local display = require("waterline.display")
 local parallel = require("waterline.parallel")
 local unicode = require("unicode")
+local registry = require("waterline.registry")
 
 local M = {}
 local CFG_PATH = "/home/waterline.cfg.lua"
 local STATE_PATH = "/home/waterline.state.lua"
-local GRADES = {
-  { id = "g7", name = "Grade 7 · Degasser", module = "waterline.g7" },
-  { id = "g8", name = "Grade 8 · Baryonic Perfection", module = "waterline.g8" },
-}
+local GRADES = registry.grades
 local COLORS = { bg = 0x0F141B, panel = 0x1A2430, head = 0x123A5A,
   fg = 0xD8E2ED, dim = 0x8495A8, blue = 0x64BAFF, green = 0x66DE91,
   yellow = 0xE6C36B, red = 0xFC7272 }
@@ -34,16 +32,18 @@ local function loadConfig()
 end
 
 local function command(verb, grade)
-  local id = grade and grade:lower()
-  if id == "7" then id = "g7" elseif id == "8" then id = "g8" end
-  if id ~= "g7" and id ~= "g8" then
-    error("укажи grade: WaterLineProgram " .. verb .. " g7|g8", 0)
+  local spec = registry.find(grade)
+  if not spec then error("укажи grade: WaterLineProgram " .. verb .. " " .. registry.ids(), 0) end
+  if verb == "run" then
+    local ok, err = require(spec.module).main({}, nil)
+    if ok == false then error(tostring(err), 0) end
+    return
   end
-  require("waterline." .. id).main({ verb })
+  return require(spec.module).main({ verb })
 end
 
 function M.main(args)
-  if args[1] == "bind" or args[1] == "scan" then return command(args[1], args[2]) end
+  if args[1] == "bind" or args[1] == "scan" or args[1] == "run" then return command(args[1], args[2]) end
   if args[1] == "screens" then
     if not component.isAvailable("gpu") then error("GPU не найден", 0) end
     for _, screen in ipairs(display.probe(component, component.gpu)) do
@@ -63,14 +63,19 @@ function M.main(args)
     return
   end
   if args[1] == "plan" then
-    local grade = tonumber(tostring(args[2] or ""):match("%d+"))
+    local spec = registry.find(args[2])
+    local grade = spec and spec.grade
     local plan = parallel.plan(grade, tonumber(args[3]))
     for g = 1, 8 do print(string.format("G%d: %d параллелей", g, plan[g])) end
     print("Теоретический минимум по воде при 100% успехе; выставь значения в GUI машин.")
     return
   end
   if args[1] == "help" then
-    print("WaterLineProgram [bind|scan g7|g8] | plan g7|g8 N | screens | screen ADDRESS")
+    print("WaterLineProgram                 — панель всех grade")
+    print("WaterLineProgram bind|scan|run gN — привязка / компоненты / один grade в текстовом режиме")
+    print("WaterLineProgram plan gN P       — план параллелей от grade N")
+    print("WaterLineProgram screens | screen ADDRESS")
+    print("grade: " .. registry.ids())
     return
   end
   if args[1] then error("неизвестная команда: " .. tostring(args[1]), 0) end
@@ -95,12 +100,12 @@ function M.main(args)
     slots[spec.id] = { spec = spec, enabled = cfg.enabled[spec.id] == true,
       stop = false, status = { phase = "не запущен" }, events = {} }
   end
-  local notice = "1/2 — grade · Space — вкл/выкл · B — привязка · P — план · M — экран · Q — выход"
+  local notice = "1–8 / ↑↓ — grade · Space — вкл/выкл · B — привязка · P — план · M — экран · Q — выход"
 
   local function addLog(slot, level, message)
     local entry = string.format("%s %-4s %s", os.date("%H:%M:%S"), level, message)
     table.insert(slot.events, 1, entry)
-    if #slot.events > 8 then slot.events[#slot.events] = nil end
+    if #slot.events > 12 then slot.events[#slot.events] = nil end
     if not gpu then print("[" .. slot.spec.id .. "] " .. entry) end
   end
   local function active(slot)
@@ -131,9 +136,10 @@ function M.main(args)
     end)
   end
   local function saveState()
-    local ok, err = bindings.save(STATE_PATH, { enabled = {
-      g7 = slots.g7.enabled, g8 = slots.g8.enabled,
-    }, baseGrade = cfg.baseGrade, baseParallel = cfg.baseParallel, screen = cfg.screen })
+    local enabled = {}
+    for _, spec in ipairs(GRADES) do enabled[spec.id] = slots[spec.id].enabled end
+    local ok, err = bindings.save(STATE_PATH, { enabled = enabled,
+      baseGrade = cfg.baseGrade, baseParallel = cfg.baseParallel, screen = cfg.screen })
     if not ok then notice = "Не удалось сохранить включённые модули: " .. tostring(err) end
   end
 
@@ -143,36 +149,56 @@ function M.main(args)
     gpu.fill(1, y, w, 1, " ")
     gpu.set(2, y, unicode.sub(tostring(value), 1, w - 3))
   end
+  local ROW0, ROWH = 5, 2 -- grade rows start at y=5, two lines per grade
+  local function rowOf(index) return ROW0 + (index - 1) * ROWH end
+  local function indexAt(y)
+    if y < ROW0 or y >= ROW0 + #GRADES * ROWH then return nil end
+    return math.floor((y - ROW0) / ROWH) + 1
+  end
+  local function stateOf(slot)
+    if active(slot) then return slot.stop and "СТОП…" or "РАБОТАЕТ", COLORS.green end
+    if slot.error then return "ОШИБКА", COLORS.red end
+    if slot.enabled then return "ЗАПУСК", COLORS.yellow end
+    return "выкл", COLORS.dim
+  end
+  local function chanceText(st)
+    local c = st.lastChance or st.chance
+    return c and string.format("%3d%%", math.floor(c + 0.5)) or "  —"
+  end
   local function draw()
     if not gpu then return end
     gpu.setBackground(COLORS.bg); gpu.fill(1, 1, w, h, " ")
     local screenName = displaySession and displaySession.selected.address:sub(1, 8) or "—"
-    line(1, "WaterLineProgram · GTNH 2.9 · G7 + G8 · экран " .. screenName, COLORS.blue, COLORS.head)
+    line(1, "WaterLineProgram · GTNH 2.9 · G1–G8 · экран " .. screenName, COLORS.blue, COLORS.head)
     local plan = parallel.plan(cfg.baseGrade, cfg.baseParallel)
     local values = {}
     for g = 1, 8 do values[#values + 1] = "G" .. g .. "×" .. plan[g] end
     line(2, "План от G" .. cfg.baseGrade .. " ×" .. cfg.baseParallel .. ": " .. table.concat(values, "  "), COLORS.blue)
-    line(3, "Минимум по воде при 100% успехе. Параллели машин выставляются в их GUI.", COLORS.dim)
+    line(3, "Минимум по воде при 100% успехе. Параллели выставляются в GUI машин.", COLORS.dim)
+    line(4, "   grade              состояние  цикл  шанс   ✓/✗     фаза", COLORS.dim, COLORS.bg)
     for i, spec in ipairs(GRADES) do
       local slot = slots[spec.id]
-      local y = 5 + (i - 1) * 10
-      local mark = selected == i and "▶ " or "  "
-      local state = active(slot) and (slot.stop and "ОСТАНАВЛИВАЕТСЯ" or "РАБОТАЕТ")
-        or (slot.error and "ОШИБКА" or (slot.enabled and "ЗАПУСК" or "ВЫКЛЮЧЕН"))
-      line(y, mark .. spec.name .. "  [" .. state .. "]",
-        slot.error and COLORS.red or (active(slot) and COLORS.green or COLORS.yellow))
       local st = slot.status
-      line(y + 1, "Цикл " .. tostring(st.cycle or "—") .. " · " .. tostring(st.phase or "ожидание") ..
-        (st.parallel and (" · факт ×" .. st.parallel) or ""),
-        COLORS.fg)
+      local y = rowOf(i)
+      local label, color = stateOf(slot)
+      local bg = selected == i and 0x23364A or COLORS.panel
+      line(y, string.format("%s%d %-16s %-9s %5s %5s %4s/%-4s %s", selected == i and "▶" or " ", spec.grade,
+        spec.short, label, tostring(st.cycle or "—"), chanceText(st), tostring(st.success or 0),
+        tostring(st.failed or 0), tostring(st.phase or "")), color, bg)
       local p, maxp = tonumber(st.progress) or 0, tonumber(st.maxProgress) or 0
+      gpu.setBackground(bg); gpu.fill(1, y + 1, w, 1, " ")
       if maxp > 0 then
-        gpu.setBackground(COLORS.panel); gpu.fill(2, y + 2, w - 4, 1, " ")
+        gpu.setBackground(0x2A323C); gpu.fill(4, y + 1, 30, 1, " ")
         gpu.setBackground(COLORS.blue)
-        gpu.fill(2, y + 2, math.max(1, math.floor((w - 4) * math.min(1, p / maxp))), 1, " ")
-      else line(y + 2, "Машина ожидает цикл", COLORS.dim) end
-      for n = 1, 4 do line(y + 2 + n, slot.events[n] or "", COLORS.dim) end
+        gpu.fill(4, y + 1, math.max(1, math.floor(30 * math.min(1, p / maxp))), 1, " ")
+      end
+      gpu.setBackground(bg); gpu.setForeground(COLORS.dim)
+      gpu.set(36, y + 1, unicode.sub(slot.error or slot.events[1] or "", 1, w - 37))
     end
+    local sel = slots[GRADES[selected].id]
+    local y0 = rowOf(#GRADES) + 3
+    line(y0, "События · " .. sel.spec.name, COLORS.blue)
+    for n = 1, h - 3 - y0 do line(y0 + n, sel.events[n] or "", COLORS.dim) end
     line(h - 2, notice, COLORS.yellow)
     line(h, "[Space] ВКЛ/ВЫКЛ  [B] ПРИВЯЗКА  [P] ПЛАН  [M] ЭКРАН  [Q] ВЫХОД", COLORS.green)
   end
@@ -206,7 +232,7 @@ function M.main(args)
 
   local function editParallel()
     if not gpu then notice = "Для ввода плана параллелей нужен монитор"; return end
-    local grade = selected + 6
+    local grade = GRADES[selected].grade
     local digits = ""
     while true do
       draw()
@@ -267,8 +293,9 @@ function M.main(args)
       local name, a, b, c = event.pull(0.5)
       if name == "interrupted" then break end
       if name == "key_down" then
-        if b == 49 or c == 200 then selected = 1
-        elseif b == 50 or c == 208 then selected = 2
+        if b and b >= 49 and b < 49 + #GRADES then selected = b - 48
+        elseif c == 200 then selected = math.max(1, selected - 1)
+        elseif c == 208 then selected = math.min(#GRADES, selected + 1)
         elseif b == 32 then toggleSelected()
         elseif b == 98 or b == 66 then bindSelected()
         elseif b == 112 or b == 80 then editParallel()
@@ -276,8 +303,8 @@ function M.main(args)
         elseif b == 113 or b == 81 or c == 1 then break end
       elseif name == "touch" and gpu and (not gpu.getScreen or a == gpu.getScreen()) then
         local x, y = b, c
-        if y >= 5 and y <= 12 then selected = 1
-        elseif y >= 15 and y <= 22 then selected = 2
+        local index = indexAt(y)
+        if index then selected = index
         elseif y == h then
           if x < 20 then toggleSelected()
           elseif x < 40 then bindSelected()
@@ -289,7 +316,11 @@ function M.main(args)
     end
     for _, spec in ipairs(GRADES) do slots[spec.id].stop = true end
     notice = "Останавливаю модули после безопасной точки цикла"
-    while active(slots.g7) or active(slots.g8) do draw(); event.pull(0.5) end
+    local function anyActive()
+      for _, spec in ipairs(GRADES) do if active(slots[spec.id]) then return true end end
+      return false
+    end
+    while anyActive() do draw(); event.pull(0.5) end
   end
   local ok, err = xpcall(run, function(e) return tostring(e) end)
   if displaySession then display.restore(displaySession) end

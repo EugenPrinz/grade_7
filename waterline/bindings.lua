@@ -158,7 +158,26 @@ local function fluidAt(proxy, side)
   return name or false -- false clears a stale fluid from an older config
 end
 
+-- New form:    M.run(title, cfg, path, roles, { me = bool, redstone = bool })
+--   roles = { { id, kind = "fluid"|"item", label, slot = "fixed"|"identity"|"any", expect }, ... }
+-- Legacy form: M.run(title, cfg, path, keys, kind, labels)  (G7 / G8)
+local function normalizeRoles(keys, kind, labels)
+  if type(keys[1]) == "table" or (#keys == 0 and type(kind) ~= "string") then
+    return keys, (type(kind) == "table" and kind or {})
+  end
+  local roles = {}
+  for _, key in ipairs(keys) do
+    roles[#roles + 1] = { id = key, kind = kind, label = key,
+      slot = kind == "item" and "fixed" or nil, expect = labels and labels[key] }
+  end
+  return roles, { me = kind == "fluid", redstone = kind == "fluid" }
+end
+M.normalizeRoles = normalizeRoles
+
 function M.run(title, original, path, keys, kind, labels)
+  local roleList, flags = normalizeRoles(keys, kind, labels)
+  local roleById = {}
+  for _, r in ipairs(roleList) do roleById[r.id] = r end
   if not component.isAvailable("gpu") then error("для привязки нужен GPU и монитор", 0) end
   local gpu = component.gpu
   local saved = M.load(path)
@@ -242,21 +261,32 @@ function M.run(title, original, path, keys, kind, labels)
       if value ~= nil then saved[role] = value; cfg[role] = value end
       return
     end
-    local addr = choose(role .. " — transposer", objects({ "transposer" }))
+    local spec = roleById[role] or { id = role, kind = "fluid" }
+    local roleKind = spec.kind or "fluid"
+    local caption = spec.label or role
+    local addr = choose(caption .. " — transposer", objects({ "transposer" }))
     if not addr then return end
     local proxy = component.proxy(addr)
-    local from = choose(role .. " — источник", sideOptions(proxy, kind, true))
+    local from = choose(caption .. " — источник", sideOptions(proxy, roleKind, true))
     if from == nil then return end
-    local slot
-    if kind == "item" then
-      slot = choose(role .. " — слот катализатора", slotOptions(proxy, from, labels and labels[role]))
-      if slot == nil then return end
+    local slot, item
+    if roleKind == "item" and spec.slot ~= "any" then
+      local picked = choose(caption .. " — слот", slotOptions(proxy, from, spec.expect))
+      if picked == nil then return end
+      if spec.slot == "identity" then
+        local ok, stack = pcall(proxy.getStackInSlot, from, picked)
+        if not ok or not stack then notice = "Слот опустел, повтори выбор."; return end
+        item = { name = stack.name, damage = stack.damage, label = stack.label }
+      else
+        slot = picked
+      end
     end
-    local to = choose(role .. " — входной хэтч/бас", sideOptions(proxy, kind, false))
+    local to = choose(caption .. " — входной хэтч/бас", sideOptions(proxy, roleKind, false))
     if to == nil then return end
     if from == to then notice = "Источник и вход машины не могут быть с одной стороны."; return end
     local route = { transposer = addr, from = from, to = to }
-    if kind == "item" then route.slot = slot else route.fluid = fluidAt(proxy, from) end
+    if roleKind == "item" then route.slot = slot; route.item = item
+    else route.fluid = fluidAt(proxy, from) end
     saved.routes = saved.routes or {}
     saved.routes[role] = route
     cfg.routes[role] = M.apply({ routes = { [role] = cfg.routes[role] } }, { routes = { [role] = route } }).routes[role]
@@ -268,12 +298,12 @@ function M.run(title, original, path, keys, kind, labels)
     local roles = {
       { id = "machine", label = "Контроллер" },
     }
-    if kind == "fluid" then
+    if flags.redstone then
       roles[#roles + 1] = { id = "redstone", label = "Redstone I/O" }
       roles[#roles + 1] = { id = "redstoneSide", label = "Сторона сигнала" }
-      roles[#roles + 1] = { id = "me", label = "ME-сеть" }
     end
-    for _, key in ipairs(keys) do roles[#roles + 1] = { id = key, label = key } end
+    if flags.me then roles[#roles + 1] = { id = "me", label = "ME-сеть" } end
+    for _, r in ipairs(roleList) do roles[#roles + 1] = { id = r.id, label = r.label or r.id } end
     while true do
       local options = {}
       for _, r in ipairs(roles) do
@@ -284,8 +314,10 @@ function M.run(title, original, path, keys, kind, labels)
           local route = cfg.routes and cfg.routes[r.id] or {}
           value = short(route.transposer) .. " " .. sideName(route.from) .. " → " .. sideName(route.to)
           if route.slot then value = value .. " slot " .. route.slot end
+          if type(route.item) == "table" then value = value .. " " .. tostring(route.item.label or route.item.name) end
         end
-        options[#options + 1] = { value = r.id, label = string.format("%-18s %s", r.label, value) }
+        options[#options + 1] = { value = r.id,
+          label = string.format("%-22s %s", unicode.sub(tostring(r.label), 1, 22), value) }
       end
       options[#options + 1] = { value = "__save", label = "СОХРАНИТЬ ПРИВЯЗКИ" }
       options[#options + 1] = { value = "__exit", label = "ВЫХОД" }

@@ -2,7 +2,7 @@
 local starts, binds, saved = { g7 = 0, g8 = 0 }, { g7 = 0, g8 = 0 }, nil
 local currentScreen, selectedLarge = "small", false
 local events = {
-  { "touch", "large", 5, 15, 0 }, -- select G8
+  { "touch", "large", 5, 19, 0 }, -- select G8 (row 19 in the 8-grade layout)
   { "key_down", "kb", 32, 57 }, -- enable G8
   { "key_down", "kb", 98, 48 }, -- bind G8 (stop, bind, restart)
   {}, -- scheduler tick while waiting for G8 to stop

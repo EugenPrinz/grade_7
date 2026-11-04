@@ -1,4 +1,4 @@
--- install.lua — установщик/обновлятор Grade 7 + Grade 8 для OpenComputers
+-- install.lua — установщик/обновлятор WaterLineProgram (GTNH 2.9, Grade 1–8) для OpenComputers
 -- Запуск:
 --   wget -f https://raw.githubusercontent.com/EugenPrinz/grade_7/main/install.lua /tmp/install.lua
 --   /tmp/install.lua [--autostart] [--force-config] [--ref <ветка|тег|коммит>]
@@ -17,13 +17,22 @@ local PROG    = "/home/bin/degasser.lua"
 local MAIN    = "/home/bin/WaterLineProgram.lua"
 local CFG     = "/home/degasser.cfg.lua"
 local SHRC    = "/home/.shrc"
+-- Every waterline/*.lua must be listed here (test/manifest_test.lua checks it).
 local PROGRAMS = {
+  { name = "waterline/registry.lua", target = "/home/lib/waterline/registry.lua" },
+  { name = "waterline/core.lua", target = "/home/lib/waterline/core.lua" },
   { name = "waterline/bindings.lua", target = "/home/lib/waterline/bindings.lua" },
   { name = "waterline/display.lua", target = "/home/lib/waterline/display.lua" },
   { name = "waterline/parallel.lua", target = "/home/lib/waterline/parallel.lua" },
-  { name = "waterline/main.lua", target = "/home/lib/waterline/main.lua" },
+  { name = "waterline/g1.lua", target = "/home/lib/waterline/g1.lua" },
+  { name = "waterline/g2.lua", target = "/home/lib/waterline/g2.lua" },
+  { name = "waterline/g3.lua", target = "/home/lib/waterline/g3.lua" },
+  { name = "waterline/g4.lua", target = "/home/lib/waterline/g4.lua" },
+  { name = "waterline/g5.lua", target = "/home/lib/waterline/g5.lua" },
+  { name = "waterline/g6.lua", target = "/home/lib/waterline/g6.lua" },
   { name = "waterline/g7.lua", target = "/home/lib/waterline/g7.lua" },
   { name = "waterline/g8.lua", target = "/home/lib/waterline/g8.lua" },
+  { name = "waterline/main.lua", target = "/home/lib/waterline/main.lua" },
   { name = "degasser.lua", target = PROG },
   { name = "grade8.lua", target = "/home/bin/grade8.lua" },
   { name = "WaterLineProgram.lua", target = MAIN },
@@ -169,9 +178,10 @@ end
 
 print("")
 print("Дальше:")
-print("  WaterLineProgram bind g7|g8 — привязать компоненты через экран")
-print("  WaterLineProgram           — запустить общий контроллер")
-print("  WaterLineProgram plan g7 10 — рассчитать минимум параллелей по воде")
+print("  WaterLineProgram bind g1..g8 — привязать компоненты grade через экран")
+print("  WaterLineProgram scan g4     — показать компоненты, стороны, жидкости и сканер")
+print("  WaterLineProgram             — общая панель; Space включает выбранный grade")
+print("  WaterLineProgram plan g7 10  — рассчитать минимум параллелей по воде")
 print("  degasser и grade8 оставлены для отдельного запуска/диагностики.")
-print("  scan доступен у обеих программ. Привязки сохраняются отдельно от конфигов.")
+print("  Привязки сохраняются отдельно от конфигов.")
 print("  Повторный запуск установщика обновляет код, сохраняя настройки.")
